@@ -1,10 +1,12 @@
 {
     "files.associations": {
+        "dense": "cpp",
+        "random": "cpp",
+        "iostream": "cpp",
         "array": "cpp",
         "atomic": "cpp",
         "bit": "cpp",
         "*.tcc": "cpp",
-        "bitset": "cpp",
         "cctype": "cpp",
         "charconv": "cpp",
         "chrono": "cpp",
@@ -39,9 +41,7 @@
         "memory_resource": "cpp",
         "numeric": "cpp",
         "optional": "cpp",
-        "random": "cpp",
         "ratio": "cpp",
-        "regex": "cpp",
         "string_view": "cpp",
         "system_error": "cpp",
         "tuple": "cpp",
@@ -50,11 +50,9 @@
         "hash_map": "cpp",
         "format": "cpp",
         "fstream": "cpp",
-        "future": "cpp",
         "initializer_list": "cpp",
         "iomanip": "cpp",
         "iosfwd": "cpp",
-        "iostream": "cpp",
         "istream": "cpp",
         "limits": "cpp",
         "mutex": "cpp",
@@ -70,7 +68,6 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "valarray": "cpp",
         "variant": "cpp"
     }
 }
