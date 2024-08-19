@@ -31,9 +31,11 @@ private:
     Matrix process_noise_position;
     Matrix process_noise_orientation;
 
-    // Sensor noise matrices
+    // Sensor related matrices
     Matrix sensor_noise_position;
     Matrix sensor_noise_orientation;
+    Matrix sensor_transition_position;
+    Matrix sensor_transition_orientation;
 
     // Transition matrices
     Matrix F_position;
@@ -56,14 +58,19 @@ private:
     Matrix Get_B_orientation(float dt) const;
 
     // Sensor transition matrices definitions
+    void Get_Sensor_matrices(const std::string &abs_sensor);
     Matrix get_GPS_transition() const;
     Matrix get_Barometer_transition() const;
 
     // Noise covariance matrices definitions
     Matrix Get_Noise_corr(const std::string &sensor) const;
    
+    // Sensor information
+    float gps_variance = 2.0f;
+    float baro_gps_variance = 1.0f;
+
 public:
-    // Constructor
+    // Constructorw
     KalmanFilter(const Vector &init_pos_state, const Vector &init_orient_state);
 
     // Position and orientation prediction and update functions

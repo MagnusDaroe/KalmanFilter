@@ -22,10 +22,11 @@ Vector baro = Vector::Zero(1);
 // Initialize position and velocity
 Eigen::Vector3f position = Eigen::Vector3f::Zero();
 Eigen::Vector3f velocity = Eigen::Vector3f::Zero();
+Eigen::Vector3f old_velocity = Eigen::Vector3f::Zero();
 
 // Sampling rate of sensors
 float gps_sample_rate = 1.0;
-float barometer_sample_rate = 0.1;
+float barometer_sample_rate = 10;
 
 double dt = 0.1;
 Matrix gps_noise_covariance = 0.1 * Matrix::Identity(2, 2);
@@ -36,7 +37,22 @@ std::vector<double> actual_vx, actual_vy, actual_vz, estimated_vx, estimated_vy,
 std::vector<double> bias_x, bias_y, bias_z;
 
 // sample amount
-int sample_amount = 100;
+int sample_amount = 1000;
+
+bool make_measurement(const float sample_rate,const float dt, const int i)
+{
+    float condition = 1/(sample_rate * dt);
+
+    if (1/(sample_rate * dt) < 1){
+        return true;
+    }
+    else if (i % static_cast<int>(condition) == 0)
+    {
+        return true;
+    }
+    
+    return false;
+}
 
 int main()
 {
@@ -46,10 +62,9 @@ int main()
     // Print initial position covariance
     for (int i = 0; i < sample_amount; ++i)
     {
-
         // Simulate motion
         velocity += actual_acceleration * dt;
-        position += velocity * dt;
+        position += (velocity+old_velocity) * dt/2;
 
         // Save actual position and velocity for plotting
         actual_x.push_back(position(0));
@@ -61,11 +76,11 @@ int main()
 
         // Simulate acceleration measurement
         meas_acceleration = actual_acceleration;
-        meas_acceleration = kf.add_noise(meas_acceleration, Matrix::Identity(3, 3));
+        meas_acceleration = kf.add_noise(meas_acceleration, Matrix::Identity(3, 3)*0.0001f);
 
         kf.predict_position(dt, meas_acceleration, rotation_matrix);
 
-        if (i % static_cast<int>(1.0 / gps_sample_rate) == 0)
+        if (make_measurement(gps_sample_rate, dt, i))
         {
             // Simulate GPS measurement
             gps = position.head(2);
@@ -74,12 +89,12 @@ int main()
             kf.update_position("GPS", gps);
         }
 
-        if (i % static_cast<int>(1.0 / barometer_sample_rate) == 0)
+        if (make_measurement(barometer_sample_rate, dt, i))
         {
-            Vector barometer_meas(1);
-            barometer_meas << position(2);
-            barometer_meas = kf.add_noise(barometer_meas, 0.1 * Matrix::Identity(1, 1));
-            kf.update_position("Barometer", barometer_meas);
+            // Simulate barometer measurement
+            baro << position(2);
+            baro = kf.add_noise(baro, 0.1 * Matrix::Identity(1, 1));
+            kf.update_position("Barometer", baro);
         }
 
         state_position = kf.get_position_state();
@@ -95,7 +110,9 @@ int main()
         bias_y.push_back(state_position(10));
         bias_z.push_back(state_position(11));
 
-        std::cout << "Updated covariance: " << kf.get_position_covariance() << std::endl;
+        //std::cout << "Updated covariance: " << kf.get_position_covariance() << std::endl;
+
+        old_velocity = velocity;
     }
 
     // save in file for plotting

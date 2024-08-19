@@ -9,7 +9,7 @@ KalmanFilter::KalmanFilter(const Vector &init_pos_state, const Vector &init_orie
     : state_position(init_pos_state), state_orientation(init_orient_state),
       err_corr_position(Matrix::Identity(12, 12)),
       err_corr_orientation(Matrix::Identity(6, 6)),
-      process_noise_position(Matrix::Identity(12, 12)),
+      process_noise_position(Matrix::Identity(12, 12) * 0.1f),
       process_noise_orientation(Matrix::Identity(6, 6))
 {
     F_position = Matrix::Identity(12, 12);
@@ -26,7 +26,8 @@ KalmanFilter::KalmanFilter(const Vector &init_pos_state, const Vector &init_orie
         {0,0,0,0,0,1},
     };
 
-    Q = Matrix::Zero(6, 6);
+    // Process noise for orientation
+    Q = Matrix::Identity(6, 6)*0.1f;
 
 
 }
@@ -90,7 +91,7 @@ Matrix KalmanFilter::Get_F_position(float dt, const Matrix &rotation_matrix) con
     Matrix temp_F_position = Matrix::Identity(12, 12);
     temp_F_position.block<3, 3>(0, 3) = dt * Matrix::Identity(3, 3);
     temp_F_position.block<3, 3>(0, 6) = 0.5f * dt * dt * Matrix::Identity(3, 3);
-    temp_F_position.block<3, 3>(3, 9) = rotation_matrix * -Matrix::Identity(3, 3);
+    temp_F_position.block<3, 3>(0, 9) = rotation_matrix * -Matrix::Identity(3, 3) * dt;
     temp_F_position.block<3, 3>(3, 6) = 0.5f * Matrix::Identity(3, 3);
     return temp_F_position;
 }
@@ -104,43 +105,49 @@ Matrix KalmanFilter::Get_B_position(float dt) const
     return temp_B_position;
 }
 
-    // Public functions
-void KalmanFilter::predict_position(float dt, const Vector &a_meas, const Matrix &rotation_matrix)
-{
-    F_position = Get_F_position(dt, rotation_matrix);
-    B_position = Get_B_position(dt);
-
-    state_position = F_position * state_position + B_position * a_meas;
-    err_corr_position = F_position * err_corr_position * F_position.transpose() + process_noise_position;
-}
-
-void KalmanFilter::update_position(const std::string &abs_sensor, const Vector &y)
-{
-    Matrix sensor_transition;
-
-    if (abs_sensor == "GPS")
+void KalmanFilter::Get_Sensor_matrices(const std::string &abs_sensor){
+     if (abs_sensor == "GPS")
     {
-        sensor_transition = get_GPS_transition();
-        sensor_noise_position = 0.1f * Matrix::Identity(2, 2);
+        sensor_transition_position = get_GPS_transition();
+        sensor_noise_position = gps_variance * Matrix::Identity(2, 2);
     }
     else if (abs_sensor == "Barometer")
     {
-        sensor_transition = get_Barometer_transition();
-        sensor_noise_position = 0.1f * Matrix::Identity(1, 1);
+        sensor_transition_position = get_Barometer_transition();
+        sensor_noise_position = baro_gps_variance * Matrix::Identity(1, 1);
     }
     else
     {
         throw std::invalid_argument("Unknown sensor type");
     }
 
-    Vector Meas_residual = y - sensor_transition * state_position;
-    Matrix Innovation_covariance = sensor_transition * err_corr_position * sensor_transition.transpose() + sensor_noise_position;
-    Matrix Kalman_gain = err_corr_position * sensor_transition.transpose() * Innovation_covariance.inverse();
+}
 
-    std::cout << "Kalman gain: " << Kalman_gain << std::endl;
+    // Public functions
+void KalmanFilter::predict_position(float dt, const Vector &a_meas, const Matrix &rotation_matrix)
+{
+    // Get the state transition matrices for the state vector and the acceleration vector
+    F_position = Get_F_position(dt, rotation_matrix);
+    B_position = Get_B_position(dt);
 
+    // Predicts the current state onto the next step using the state transition matrix for the state vector. Note, half of the predicted acceleration is used and half the measurment
+    state_position = F_position * state_position + B_position * a_meas;
+    err_corr_position = F_position * err_corr_position * F_position.transpose() + process_noise_position;
+}
+
+void KalmanFilter::update_position(const std::string &abs_sensor, const Vector &y)
+{
+    // Get sensor matrices for update
+    Get_Sensor_matrices(abs_sensor);
+
+    // Calculates the residual, the innovation covariance and the Kalman gain
+    Vector Meas_residual = y - sensor_transition_position * state_position;
+    Matrix Innovation_covariance = sensor_transition_position * err_corr_position * sensor_transition_position.transpose() + sensor_noise_position;
+    Matrix Kalman_gain = err_corr_position * sensor_transition_position.transpose() * Innovation_covariance.inverse();
+
+    // Updates the state vector and the error state covariance matrix
     state_position += Kalman_gain * Meas_residual;
-    err_corr_position -= Kalman_gain * sensor_transition * err_corr_position;
+    err_corr_position -= Kalman_gain * sensor_transition_position * err_corr_position;
 }
 
 
@@ -237,14 +244,14 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
 {
     Matrix Noise_corr = Get_Noise_corr(abs_sensor);
    
-    // Picks out the part of the covariance matrix which is with repsect to the error parameters "a" ie: [Pa]
+    // Picks out the part of the covariance matrix which is with respect to the error parameters "gibbs" ie: [P_gibbs]
     Matrix P_gibbs = err_corr_orientation.block<3, 3>(0, 0);
 
     // Picks outthe first three rows, describing the covariance between "a" and "b" ie: [Pa Pc]
     Matrix PAC = err_corr_orientation.block<3, 6>(0, 0);
 
     // Picks out the part of the error state which coinsides with the gibs parameters - Migth be wrong!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    Vector3 gibbs = state_orientation.segment(0, 3);
+    state_gibbs = state_orientation.segment(0, 3);
 
     // Calculates the inverse of the predicted quaternion
     Vector4 state_quaternion_inv{
@@ -269,14 +276,11 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
     // Note that PAC is NOT is equal Pact due to numerical approximations, so the covariance matrix is NOT symetric
     Matrix Pact = err_corr_orientation.block<6, 3>(0, 0);
     
-    // Calculates the Kalman gain: PAC^(T)*[PAC + R]^(-1)
-    Matrix Kalman_gain = Pact*(PAC+Noise_corr).inverse();
+    // Calculates the Kalman gain: PAC^(T)*[PA + R]^(-1)
+    Matrix Kalman_gain = Pact*(P_gibbs + Noise_corr).inverse();
 
-    // Calculates the change for the error state vector
-    error_gibbs = Kalman_gain*error_gibbs;
-
-    // Updates the error state vector
-    gibbs = gibbs + error_gibbs;
+    // Calculates the change for the error state vector and updates the error state vector
+    state_gibbs = state_gibbs + Kalman_gain*error_gibbs;
 
     // Maps the the gibbs parameters of the error state vector to quaternion state
     Vector4 delta_q{
@@ -293,7 +297,9 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
     state_quaternion = state_quaternion/state_quaternion.norm();
 
     // Resets the gibbs parameters in the error state
-    state_gibbs = state_gibbs.setZero();
+    state_gibbs(0) = 0;
+    state_gibbs(1) = 0;
+    state_gibbs(2) = 0;
 
     // Updates the error state covariance matrix
     err_corr_orientation = err_corr_orientation - Kalman_gain * PAC;
@@ -351,9 +357,9 @@ Vector KalmanFilter::get_orientation_state() const
 
 Vector KalmanFilter::get_orientation_state_euler() const{
     //Extract imaginary parts of quaternion
-    Vector3 q = state_orientation.segment(0, 3);
+    Vector3 q = state_quaternion.segment(0, 3);
     // Extract real part of quaternion
-    float qw = state_orientation(3);
+    float qw = state_quaternion(3);
     Vector3 euler = quatToAngle(q, qw) * (180/PI);
 
     return euler;
