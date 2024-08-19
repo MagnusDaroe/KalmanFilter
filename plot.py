@@ -1,25 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Load the data from the file
-data = np.loadtxt('data.txt')
+# Load data from the files
+actual_position = np.loadtxt('actual_position.txt')
+estimated_position = np.loadtxt('estimated_position.txt')
+bias = np.loadtxt('bias_values.txt')
 
-# Extract columns from the data
-actual_x = data[:, 0]
-actual_y = data[:, 1]
-actual_z = data[:, 2]
-estimated_x = data[:, 3]
-estimated_y = data[:, 4]
-estimated_z = data[:, 5]
-actual_vx = data[:, 6]
-actual_vy = data[:, 7]
-actual_vz = data[:, 8]
-estimated_vx = data[:, 9]
-estimated_vy = data[:, 10]
-estimated_vz = data[:, 11]
-bias_x = data[:, 12]
-bias_y = data[:, 13]
-bias_z = data[:, 14]
+# Assuming the position files also contain velocity data (X, Y, Z, Vx, Vy, Vz)
+actual_x = actual_position[:, 0]
+actual_y = actual_position[:, 1]
+actual_z = actual_position[:, 2]
+actual_vx = actual_position[:, 3]
+actual_vy = actual_position[:, 4]
+actual_vz = actual_position[:, 5]
+
+estimated_x = estimated_position[:, 0]
+estimated_y = estimated_position[:, 1]
+estimated_z = estimated_position[:, 2]
+estimated_vx = estimated_position[:, 3]
+estimated_vy = estimated_position[:, 4]
+estimated_vz = estimated_position[:, 5]
+
+# Assuming the bias file contains Bias X, Bias Y, Bias Z
+bias_x = bias[:, 0]
+bias_y = bias[:, 1]
+bias_z = bias[:, 2]
 
 # Time vector (assuming each entry corresponds to a sequential time step)
 time = np.arange(len(actual_x))
