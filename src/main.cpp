@@ -1,3 +1,7 @@
+// cmake .. -G "MinGW Makefiles"
+// mingw32-make
+//./KalmanFilter
+
 #include "KalmanFilter.h"
 #include <iostream>
 #include <fstream>
@@ -203,7 +207,7 @@ int main()
     std::cout << "Starting simulation" << std::endl;
     
     //Generate trapezoidal profile
-    Matrix accelProfile = trapezoidalProfile(sample_amount, 0.5);
+    Matrix accelProfile = trapezoidalProfile(sample_amount, 0.1);
 
     // Print initial position covariance
     for (int i = 0; i < sample_amount; ++i)
