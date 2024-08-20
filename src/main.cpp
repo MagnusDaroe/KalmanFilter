@@ -29,10 +29,8 @@ Matrix rotation_matrix = Matrix::Identity(3, 3);
 Vector gps = Vector::Zero(2);
 Vector baro = Vector::Zero(1);
 
-// Initialize position and velocity
-Eigen::Vector3f position = Eigen::Vector3f::Zero();
-Eigen::Vector3f velocity = Eigen::Vector3f::Zero();
-Eigen::Vector3f old_velocity = Eigen::Vector3f::Zero();
+//Actual state
+Vector actual_state = Vector::Zero(6);
 
 // Sampling rate of sensors
 float gps_sample_rate = 1.0;
@@ -83,6 +81,32 @@ Matrix trapezoidalProfile(int numSamples, double maxAccel) {
     return accelProfile;
 }
 
+// Simulate motion
+Vector motion_func(Vector state, Vector acceleration)
+{
+    // Extract velocity from state
+    Vector vel = state.tail(3);
+
+    // dy/dt vector. Save velocity and acceleration in a 6x1 vector
+    Vector dydt = Vector::Zero(6);
+    dydt << vel, acceleration;
+
+    return dydt;
+}
+
+
+
+Vector simulate_motion(Vector state, Vector3 acceleration, float dt)
+{
+    
+    Vector k1 = motion_func(state, acceleration);
+    Vector k2 = motion_func(state + k1 * dt / 2, acceleration);
+    Vector k3 = motion_func(state + k2 * dt / 2, acceleration);
+    Vector k4 = motion_func(state + k3 * dt, acceleration);
+
+    return state + (k1 + 2 * k2 + 2 * k3 + k4) * dt / 6;
+}
+
 // Function to check if a measurement should be made
 bool make_measurement(const float sample_rate,const float dt, const int i)
 {
@@ -100,13 +124,13 @@ bool make_measurement(const float sample_rate,const float dt, const int i)
 }
 
 // Function to save actual position and velocity
-void save_actual_position()
+void save_actual_position(Vector state)
 {
     // Save actual position and velocity for plotting in actual_values.txt
     std::ofstream file("../actual_position.txt", std::ios::app);
     if (file.is_open())
     {
-        file << position(0) << " " << position(1) << " " << position(2) << " " << velocity(0) << " " << velocity(1) << " " << velocity(2) << std::endl;
+        file << state(0) << " " << state(1) << " " << state(2) << " " << state(3) << " " << state(4) << " " << state(5) << std::endl;
     }
     else
     {
@@ -198,6 +222,8 @@ void clear_files()
 }
 
 
+
+
 int main()
 {
     // Clear the files before writing
@@ -216,11 +242,10 @@ int main()
         actual_acceleration = accelProfile.col(i);
 
         // Simulate motion
-        velocity += actual_acceleration * dt;
-        position += (velocity+old_velocity) * dt/2;
+        actual_state = simulate_motion(actual_state, actual_acceleration, dt);
 
         // Save actual position and velocity for plotting
-        save_actual_position();
+        save_actual_position(actual_state);
 
         // Simulate acceleration measurement
         meas_acceleration = actual_acceleration;
@@ -233,7 +258,7 @@ int main()
         if (make_measurement(gps_sample_rate, dt, i))
         {
             // Simulate GPS measurement
-            gps = position.head(2);
+            gps = actual_state.head(2);
             gps = kf.add_noise(gps, gps_noise_covariance);
 
             kf.update_position("GPS", gps);
@@ -242,7 +267,7 @@ int main()
         if (make_measurement(barometer_sample_rate, dt, i))
         {
             // Simulate barometer measurement
-            baro << position(2);
+            baro << actual_state(2);
             baro = kf.add_noise(baro, 0.1 * Matrix::Identity(1, 1));
             kf.update_position("Barometer", baro);
         }
@@ -253,9 +278,7 @@ int main()
         // Save estimated position for plotting
         save_estimated_position();
         save_bias_values();
-    
-        // Save actual and estimated position and velocity
-        old_velocity = velocity;
+
     }
 
     return 0;
