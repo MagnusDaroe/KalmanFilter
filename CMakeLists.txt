@@ -16,6 +16,7 @@ include_directories(include)
 set(SOURCES
     src/main.cpp
     src/KalmanFilter.cpp
+    src/Simulate.cpp
 )
 
 # Create the executable

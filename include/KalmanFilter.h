@@ -66,7 +66,7 @@ private:
     Matrix Get_Noise_corr(const std::string &sensor) const;
    
     // Sensor information
-    float gps_variance = 2.0f;
+    float gps_variance = 1.0f;
     float baro_gps_variance = 1.0f;
 
 public:

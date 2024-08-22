@@ -3,19 +3,22 @@
 //./KalmanFilter
 
 #include "KalmanFilter.h"
+#include "Simulate.h"
 #include <iostream>
-#include <fstream>
 #include <cmath>
 
 // Create an instance of KalmanFilter
 KalmanFilter kf(Vector::Zero(12), Vector::Zero(6));
+
+// Create an instance of Simulate
+Simulate sim;
 
 // Initialize KalmanFilter object
 Vector state_position = kf.get_position_state();
 Vector state_orientation = kf.get_orientation_state();
 
 // Initialize actual acceleration and measurement acceleration. The actual acceleration is applied in a global frame
-Vector actual_acceleration = Vector::Ones(3) * 0.1;
+Vector actual_acceleration = Vector::Ones(3) * 0.05;
 Vector meas_acceleration(3);
 
 // Initialize orientation state. Orientation acceleration is in a global frame
@@ -32,8 +35,12 @@ Vector baro = Vector::Zero(1);
 //Actual state
 Vector actual_state = Vector::Zero(6);
 
+//Estimated state
+Vector estimated_position = Vector::Zero(6);
+Vector estimated_bias = Vector::Zero(3);
+
 // Sampling rate of sensors
-float gps_sample_rate = 1.0;
+float gps_sample_rate = 2.0;
 float barometer_sample_rate = 10;
 
 double dt = 0.1;
@@ -42,198 +49,25 @@ Matrix gps_noise_covariance = 0.1 * Matrix::Identity(2, 2);
 // sample amount
 int sample_amount = 1000;
 
-// Generate motion profile
-Matrix trapezoidalProfile(int numSamples, double maxAccel) {
-    Matrix accelProfile(3, numSamples);
-    float accel = 0;
-
-    // Determine the number of samples in the ramp-up and ramp-down phases
-    int rampSamples = numSamples / 3;
-    int zeroAccelSamples = numSamples - 2 * rampSamples;
-
-    // Ramp-up phase
-    for (int i = 0; i < rampSamples; ++i) {
-        //accel = maxAccel * (static_cast<double>(i) / rampSamples);
-        accel = maxAccel;
-
-        accelProfile(0,i) = accel;
-        accelProfile(1,i) = accel;
-        accelProfile(2,i) = accel;
-    }
-
-    // Zero acceleration phase
-    for (int i = rampSamples; i < rampSamples + zeroAccelSamples; ++i) {
-        accelProfile(0,i) = 0;
-        accelProfile(1,i) = 0;
-        accelProfile(2,i) = 0;
-    }
-
-    // Ramp-down phase
-    for (int i = rampSamples + zeroAccelSamples; i < numSamples; ++i) {
-        //accel = maxAccel * (1.0 - static_cast<double>(i - rampSamples) / rampSamples);
-        accel = -maxAccel;
-        
-        accelProfile(0,i) = accel;
-        accelProfile(1,i) = accel;
-        accelProfile(2,i) = accel;
-    }
-
-    return accelProfile;
-}
-
-// Simulate motion
-Vector motion_func(Vector state, Vector acceleration)
-{
-    // Extract velocity from state
-    Vector vel = state.tail(3);
-
-    // dy/dt vector. Save velocity and acceleration in a 6x1 vector
-    Vector dydt = Vector::Zero(6);
-    dydt << vel, acceleration;
-
-    return dydt;
-}
-
-
-
-Vector simulate_motion(Vector state, Vector3 acceleration, float dt)
-{
-    
-    Vector k1 = motion_func(state, acceleration);
-    Vector k2 = motion_func(state + k1 * dt / 2, acceleration);
-    Vector k3 = motion_func(state + k2 * dt / 2, acceleration);
-    Vector k4 = motion_func(state + k3 * dt, acceleration);
-
-    return state + (k1 + 2 * k2 + 2 * k3 + k4) * dt / 6;
-}
-
-// Function to check if a measurement should be made
-bool make_measurement(const float sample_rate,const float dt, const int i)
-{
-    float condition = 1/(sample_rate * dt);
-
-    if (1/(sample_rate * dt) < 1){
-        return true;
-    }
-    else if (i % static_cast<int>(condition) == 0)
-    {
-        return true;
-    }
-    
-    return false;
-}
-
-// Function to save actual position and velocity
-void save_actual_position(Vector state)
-{
-    // Save actual position and velocity for plotting in actual_values.txt
-    std::ofstream file("../actual_position.txt", std::ios::app);
-    if (file.is_open())
-    {
-        file << state(0) << " " << state(1) << " " << state(2) << " " << state(3) << " " << state(4) << " " << state(5) << std::endl;
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;
-    }
-}
-
-void save_estimated_position(){
-    // Save estimated position and velocity for plotting in estimated_values.txt
-    std::ofstream file("../estimated_position.txt", std::ios::app);
-    
-    // Check if the file is open before writing
-    if (file.is_open())
-    {
-        file << state_position(0) << " " << state_position(1) << " " << state_position(2) << " " << state_position(3) << " " << state_position(4) << " " << state_position(5) << std::endl;
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;   
-    }
-}
-
-void save_actual_orientation()
-{
-    // Save actual orientation for plotting in actual_orientation.txt
-    std::ofstream file("../actual_orientation.txt", std::ios::app);
-    if (file.is_open())
-    {
-        //file << x(0) << " " << x(1) << " " << x(2) << std::endl;
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;
-    }
-}
-
-void save_estimated_orientation()
-{
-    // Save estimated orientation for plotting in estimated_orientation.txt
-    std::ofstream file("../estimated_orientation.txt", std::ios::app);
-    if (file.is_open())
-    {
-        file << state_orientation(0) << " " << state_orientation(1) << " " << state_orientation(2) << std::endl;
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;
-    }
-}
-
-void save_bias_values()
-{
-    // Open the file in append mode to avoid overwriting
-    std::ofstream file("../bias_values.txt", std::ios::app);
-
-    // Check if the file is open before writing
-    if (file.is_open())
-    {
-        file << state_position(6) << " " << state_position(7) << " " << state_position(8) << std::endl;
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;
-    }
-}
-
-void clear_files()
-{
-    // Clear the files before writing
-    std::ofstream file1("../actual_position.txt");
-    std::ofstream file2("../estimated_position.txt");
-    std::ofstream file3("../actual_orientation.txt");
-    std::ofstream file4("../estimated_orientation.txt");
-    std::ofstream file5("../bias_values.txt");
-
-    // Check if the files are open before writing
-    if (file1.is_open() && file2.is_open() && file3.is_open() && file4.is_open() && file5.is_open())
-    {
-        file1 << "";
-        file2 << "";
-        file3 << "";
-        file4 << "";
-        file5 << "";
-    }
-    else
-    {
-        std::cerr << "Unable to open file for writing." << std::endl;
-    }
-}
-
-
-
+// Function to save actual position and velocity. List with paths
+std::vector<std::string> file_paths = {
+        "../data/actual_position.txt",
+        "../data/actual_orientation.txt",
+        "../data/estimated_position.txt",
+        "../data/estimated_orientation.txt",
+        "../data/bias_values.txt"
+    };
 
 int main()
 {
     // Clear the files before writing
-    clear_files();
+    sim.clear_files(file_paths);
 
     // Print initial position state
     std::cout << "Starting simulation" << std::endl;
     
     //Generate trapezoidal profile
-    Matrix accelProfile = trapezoidalProfile(sample_amount, 0.1);
+    Matrix accelProfile = sim.trapezoidalProfile(sample_amount, 0.1);
 
     // Print initial position covariance
     for (int i = 0; i < sample_amount; ++i)
@@ -241,11 +75,11 @@ int main()
         //Extract actual acceleration
         actual_acceleration = accelProfile.col(i);
 
-        // Simulate motion
-        actual_state = simulate_motion(actual_state, actual_acceleration, dt);
+        // Simulate motion propegation based on acceleration
+        actual_state = sim.simulate_motion(actual_state, actual_acceleration, dt);
 
         // Save actual position and velocity for plotting
-        save_actual_position(actual_state);
+        sim.save_info_to_file(file_paths[0], actual_state);
 
         // Simulate acceleration measurement
         meas_acceleration = actual_acceleration;
@@ -255,7 +89,7 @@ int main()
         kf.predict_position(dt, meas_acceleration, rotation_matrix);
 
         // Update position based on sensor measurements
-        if (make_measurement(gps_sample_rate, dt, i))
+        if (sim.make_measurement(gps_sample_rate, dt, i))
         {
             // Simulate GPS measurement
             gps = actual_state.head(2);
@@ -264,7 +98,7 @@ int main()
             kf.update_position("GPS", gps);
         }
 
-        if (make_measurement(barometer_sample_rate, dt, i))
+        if (sim.make_measurement(barometer_sample_rate, dt, i))
         {
             // Simulate barometer measurement
             baro << actual_state(2);
@@ -275,10 +109,12 @@ int main()
         // Get estimated position state
         state_position = kf.get_position_state();
 
-        // Save estimated position for plotting
-        save_estimated_position();
-        save_bias_values();
+        // Save estimated position for plotting. Unpack the state vector
+        estimated_position = state_position.head(6);
+        estimated_bias = state_position.tail(3);
 
+        sim.save_info_to_file(file_paths[2], estimated_position);
+        sim.save_info_to_file(file_paths[4], estimated_bias);
     }
 
     return 0;

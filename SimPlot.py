@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load data from the files
-actual_position = np.loadtxt('actual_position.txt')
-estimated_position = np.loadtxt('estimated_position.txt')
-bias = np.loadtxt('bias_values.txt')
+actual_position = np.loadtxt('data/actual_position.txt')
+estimated_position = np.loadtxt('data/estimated_position.txt')
+bias = np.loadtxt('data/bias_values.txt')
 
 # Assuming the position files also contain velocity data (X, Y, Z, Vx, Vy, Vz)
 actual_x = actual_position[:, 0]
