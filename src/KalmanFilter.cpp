@@ -58,6 +58,25 @@ Vector KalmanFilter::quatToAngle(Vector q, float qw) const
     return euler;
 }
 
+ Vector KalmanFilter::angleToQuat(Vector euler) const{
+    // Convert euler angles to quaternion. The quat is in the form [x,y,z,w]
+    float cy = cos(euler(2) * 0.5);
+    float sy = sin(euler(2) * 0.5);
+    float cp = cos(euler(1) * 0.5);
+    float sp = sin(euler(1) * 0.5);
+    float cr = cos(euler(0) * 0.5);
+    float sr = sin(euler(0) * 0.5);
+
+    Vector4 q{
+        cr * cp * cy + sr * sp * sy,
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy
+    };
+
+    return q;
+ }
+
 Matrix KalmanFilter::crossMatrix(Vector inputvector) const
 {
     Matrix crossMatrix{ 
@@ -154,38 +173,6 @@ void KalmanFilter::update_position(const std::string &abs_sensor, const Vector &
 // Orientation
 
     // Private functions
-Matrix KalmanFilter::Get_Noise_corr(const std::string &sensor) const{
-
-    // Calcualtes the noise covariance for the current sensor
-    if (sensor == "Gyroscope")
-    {   
-        Vector3 noise{{0.1f, 0.1f, 0.1f}};
-
-        Matrix Noise_corr{
-        {noise(0)*noise(0), 0, 0},
-        {0, noise(1)*noise(1), 0},
-        {0, 0, noise(2)*noise(2)},
-        };
-        return Noise_corr;
-    }
-    else if (sensor == "Magnetometer")
-    {
-        Vector3 noise{{0.1f, 0.1f, 0.1f}};
-
-        Matrix Noise_corr{
-        {noise(0)*noise(0), 0, 0},
-        {0, noise(1)*noise(1), 0},
-        {0, 0, noise(2)*noise(2)},
-        };
-        return Noise_corr;
-    }
-    else
-    {
-        throw std::invalid_argument("Unknown sensor type");
-    }
-    
-}
-
 Matrix KalmanFilter::Get_B_orientation(float dt) const
 {
     Matrix temp_B_orientation = Matrix::Zero(6, 3);
@@ -240,19 +227,17 @@ void KalmanFilter::predict_orientation(float dt, const Vector &w_meas)
     err_corr_orientation = err_corr_orientation + err_corr_orientation_dot;
 }
 
-void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vector &y, const Vector Noise)
+void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vector &y, const Matrix Sensor_Noise_corr)
 {
-    Matrix Noise_corr = Get_Noise_corr(abs_sensor);
-   
     // Picks out the part of the covariance matrix which is with respect to the error parameters "gibbs" ie: [P_gibbs]
     Matrix P_gibbs = err_corr_orientation.block<3, 3>(0, 0);
-
+   
     // Picks outthe first three rows, describing the covariance between "a" and "b" ie: [Pa Pc]
     Matrix PAC = err_corr_orientation.block<3, 6>(0, 0);
-
-    // Picks out the part of the error state which coinsides with the gibs parameters - Migth be wrong!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    // Picks out the part of the error state which coinsides with the gibs parameters
     state_gibbs = state_orientation.segment(0, 3);
-
+    
     // Calculates the inverse of the predicted quaternion
     Vector4 state_quaternion_inv{
         {-state_quaternion(0)},
@@ -264,29 +249,30 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
 
     // Finds the error quaternion describing the difference between the measured and predicted value
     Vector4 error_quat = shuster_multiply(y, state_quaternion_inv);
-
+ 
     // Maps the error quaternion to gibbs parameters
     Vector3 error_gibbs{
         {(float) 2.0*error_quat(0)/error_quat(3)},
         {(float) 2.0*error_quat(1)/error_quat(3)},
         {(float) 2.0*error_quat(2)/error_quat(3)},
     };
-
+    
     // Picks out the first three columns of the covariance matrix ie: [Pa Pc^(T)]^(T)
     // Note that PAC is NOT is equal Pact due to numerical approximations, so the covariance matrix is NOT symetric
     Matrix Pact = err_corr_orientation.block<6, 3>(0, 0);
-    
+
     // Calculates the Kalman gain: PAC^(T)*[PA + R]^(-1)
-    Matrix Kalman_gain = Pact*(P_gibbs + Noise_corr).inverse();
+    Matrix Kalman_gain = Pact*(P_gibbs + Sensor_Noise_corr).inverse();
 
     // Calculates the change for the error state vector and updates the error state vector
-    state_gibbs = state_gibbs + Kalman_gain*error_gibbs;
+   
+    state_orientation = state_orientation + Kalman_gain*error_gibbs;
 
     // Maps the the gibbs parameters of the error state vector to quaternion state
     Vector4 delta_q{
-        {state_gibbs(0)},
-        {state_gibbs(1)},
-        {state_gibbs(2)},
+        {state_orientation(0)},
+        {state_orientation(1)},
+        {state_orientation(2)},
         {2},    
     };
 
@@ -297,9 +283,9 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
     state_quaternion = state_quaternion/state_quaternion.norm();
 
     // Resets the gibbs parameters in the error state
-    state_gibbs(0) = 0;
-    state_gibbs(1) = 0;
-    state_gibbs(2) = 0;
+    state_orientation(0) = 0;
+    state_orientation(1) = 0;
+    state_orientation(2) = 0;
 
     // Updates the error state covariance matrix
     err_corr_orientation = err_corr_orientation - Kalman_gain * PAC;
@@ -356,10 +342,12 @@ Vector KalmanFilter::get_orientation_state() const
 }
 
 Vector KalmanFilter::get_orientation_state_euler() const{
+    
     //Extract imaginary parts of quaternion
-    Vector3 q = state_quaternion.segment(0, 3);
+    Vector q = state_quaternion.head(3);
     // Extract real part of quaternion
     float qw = state_quaternion(3);
+
     Vector3 euler = quatToAngle(q, qw) * (180/PI);
 
     return euler;

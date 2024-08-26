@@ -18,10 +18,10 @@ class KalmanFilter
 {
 private:
     // State variables
-    Vector state_position;
-    Vector state_orientation;
-    Vector state_quaternion;
-    Vector state_gibbs;
+    Vector state_position = Vector::Zero(12);
+    Vector state_orientation = Vector::Zero(6);
+    Vector state_quaternion = Vector4::Zero();
+    Vector state_gibbs = Vector3::Zero();
 
     // Error covariance matrices
     Matrix err_corr_position;
@@ -61,9 +61,6 @@ private:
     void Get_Sensor_matrices(const std::string &abs_sensor);
     Matrix get_GPS_transition() const;
     Matrix get_Barometer_transition() const;
-
-    // Noise covariance matrices definitions
-    Matrix Get_Noise_corr(const std::string &sensor) const;
    
     // Sensor information
     float gps_variance = 1.0f;
@@ -78,7 +75,10 @@ public:
     void update_position(const std::string &abs_sensor, const Vector &y);
 
     void predict_orientation(float dt, const Vector &w_meas);
-    void update_orientation(const std::string &abs_sensor, const Vector &y, const Vector Noise);
+    void update_orientation(const std::string &abs_sensor, const Vector &y, const Matrix Noise);
+
+    //Convert angle to quaternion
+    Vector angleToQuat(Vector euler) const;
 
     // Simulation functions
     Vector add_noise(const Vector &meas, const Matrix &noise_covariance) const;

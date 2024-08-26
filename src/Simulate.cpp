@@ -42,6 +42,7 @@ Vector Simulate::simulate_motion(Vector state, Vector3 acceleration, float dt)
 
 // Generate a trapezoidal acceleration profile
 Matrix Simulate::trapezoidalProfile(int numSamples, double maxAccel) {
+    
     Matrix accelProfile(3, numSamples);
     float accel = 0;
 
