@@ -126,6 +126,7 @@ void update(int timestep)
 
 int main()
 {
+
     // Initialize KalmanFilter object
     Vector state_position = kf.get_position_state();
     Vector state_orientation = kf.get_orientation_state();
@@ -135,7 +136,7 @@ int main()
     sim.clear_files(file_paths);
 
     // Print initial position state
-    std::cout << "Starting simulation" << std::endl;
+    std::cout << "Starting simulation.... will simulate for " << sample_time_sec << " seconds." << std::endl;
 
     // Generate trapezoidal profile
     Matrix accelProfile = sim.trapezoidalProfile(sample_amount, 0.01);
@@ -145,7 +146,8 @@ int main()
     {
         // Extract actual acceleration and angular acceleration
         actual_acceleration = accelProfile.col(i);
-        actual_w_acceleration = accelProfile.col(i);
+        //actual_w_acceleration = accelProfile.col(i);
+        actual_w_acceleration = Vector::Ones(3) * 0.01;
 
         // Simulate motion propagation based on acceleration
         actual_state_position = sim.simulate_motion(actual_state_position, actual_acceleration, dt);
@@ -177,6 +179,8 @@ int main()
         sim.save_info_to_file(file_paths[3], state_orientation_euler);
         sim.save_info_to_file(file_paths[5], estimated_bias);
     }
+
+    std::cout << "Simulation complete. Data saved to files." << std::endl;
 
     return 0;
 }

@@ -2,11 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load data from the files
-actual_position = np.loadtxt('Sim_data/actual_position.txt')
-estimated_position = np.loadtxt('Sim_data/estimated_position.txt')
-bias = np.loadtxt('Sim_data/bias_values.txt')
+actual_position = np.loadtxt(r'Sim_data\actual_position.txt')
+estimated_position = np.loadtxt(r'Sim_data\estimated_position.txt')
+bias_position = np.loadtxt(r'Sim_data\actual_position.txt')
+actual_orientation = np.loadtxt(r'Sim_data\actual_orientation.txt')
+estimated_orientation = np.loadtxt(r'Sim_data\estimated_orientation.txt')
+bias_orientation = np.loadtxt(r'Sim_data\bias_orientation.txt')
 
-# Assuming the position files also contain velocity data (X, Y, Z, Vx, Vy, Vz)
+# Extract data
 actual_x = actual_position[:, 0]
 actual_y = actual_position[:, 1]
 actual_z = actual_position[:, 2]
@@ -21,17 +24,29 @@ estimated_vx = estimated_position[:, 3]
 estimated_vy = estimated_position[:, 4]
 estimated_vz = estimated_position[:, 5]
 
-# Assuming the bias file contains Bias X, Bias Y, Bias Z
-bias_x = bias[:, 0]
-bias_y = bias[:, 1]
-bias_z = bias[:, 2]
+bias_x = bias_position[:, 0]
+bias_y = bias_position[:, 1]
+bias_z = bias_position[:, 2]
 
-# Time vector (assuming each entry corresponds to a sequential time step)
+actual_roll = actual_orientation[:, 0]
+actual_pitch = actual_orientation[:, 1]
+actual_yaw = actual_orientation[:, 2]
+
+estimated_roll = estimated_orientation[:, 0]
+estimated_pitch = estimated_orientation[:, 1]
+estimated_yaw = estimated_orientation[:, 2]
+
+# Extract bias orientation data (assuming it contains Roll, Pitch, Yaw biases)
+bias_roll = bias_orientation[:, 0]
+bias_pitch = bias_orientation[:, 1]
+bias_yaw = bias_orientation[:, 2]
+
 time = np.arange(len(actual_x))
 
-# Plot Position
-plt.figure(figsize=(14, 10))
+# Create the first figure for Position, Velocity, and Bias
+plt.figure(figsize=(14, 12))
 
+# Plot Position
 plt.subplot(3, 1, 1)
 plt.plot(time, actual_x, color='darkorange', linestyle='-', label='Actual X')
 plt.plot(time, estimated_x, color='royalblue', linestyle='--', label='Estimated X')
@@ -67,6 +82,34 @@ plt.xlabel('Time Step')
 plt.ylabel('Bias')
 plt.legend()
 
-# Adjust layout and show plot
+plt.tight_layout()
+plt.show()
+
+# Create the second figure for Orientation and combined Bias & Orientation
+plt.figure(figsize=(14, 10))
+
+# Plot Orientation
+plt.subplot(2, 1, 1)
+plt.plot(time, actual_roll, color='magenta', linestyle='-', label='Actual Roll')
+plt.plot(time, estimated_roll, color='purple', linestyle='--', label='Estimated Roll')
+plt.plot(time, actual_pitch, color='cyan', linestyle='-.', label='Actual Pitch')
+plt.plot(time, estimated_pitch, color='blue', linestyle=':', label='Estimated Pitch')
+plt.plot(time, actual_yaw, color='yellow', linestyle='--', label='Actual Yaw')
+plt.plot(time, estimated_yaw, color='orange', linestyle='-', label='Estimated Yaw')
+plt.title('Orientation')
+plt.xlabel('Time Step')
+plt.ylabel('Angle (radians)')
+plt.legend()
+
+# Plot Bias in Orientation
+plt.subplot(2, 1, 2)
+plt.plot(time, bias_roll, color='magenta', linestyle='-', label='Bias Roll')
+plt.plot(time, bias_pitch, color='cyan', linestyle='--', label='Bias Pitch')
+plt.plot(time, bias_yaw, color='yellow', linestyle=':', label='Bias Yaw')
+plt.title('Bias in Orientation')
+plt.xlabel('Time Step')
+plt.ylabel('Bias (radians)')
+plt.legend()
+
 plt.tight_layout()
 plt.show()
