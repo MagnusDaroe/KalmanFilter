@@ -20,7 +20,7 @@ private:
     // State variables
     Vector state_position = Vector::Zero(12);
     Vector state_orientation = Vector::Zero(6);
-    Vector state_quaternion = Vector4::Zero();
+    Vector state_quaternion = Vector::Zero(4);
     Vector state_gibbs = Vector3::Zero();
 
     // Error covariance matrices

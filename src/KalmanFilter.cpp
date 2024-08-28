@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <cassert>
+#include <thread>
 
 // Constructor
 KalmanFilter::KalmanFilter(const Vector &init_pos_state, const Vector &init_orient_state)
@@ -29,6 +30,8 @@ KalmanFilter::KalmanFilter(const Vector &init_pos_state, const Vector &init_orie
     // Process noise for orientation
     Q = Matrix::Identity(6, 6)*0.1f;
 
+    //state quaternion
+    state_quaternion << 0, 0, 0, 1;
 
 }
 
@@ -183,6 +186,7 @@ Matrix KalmanFilter::Get_B_orientation(float dt) const
     // Public functions
 void KalmanFilter::predict_orientation(float dt, const Vector &w_meas)
 {
+
     // Store predicted bias of the angular velocity
     Vector3 bias_w{{state_orientation(3)}, {state_orientation(4)}, {state_orientation(5)}};
 
@@ -218,13 +222,13 @@ void KalmanFilter::predict_orientation(float dt, const Vector &w_meas)
         {0,0,0,0,0,0},
     };
 
-
     // Predicts the current state onto the next step using the prediction matrix for the state quaternion
     state_quaternion = F_orientation_quat * state_quaternion;
 
     // Finds the derivative of the state covariance, which is used to approximate the predicted covariance
     Matrix err_corr_orientation_dot = dt * (F_err_corr * err_corr_orientation * F_err_corr.transpose() + G * Q * G.transpose());
     err_corr_orientation = err_corr_orientation + err_corr_orientation_dot;
+
 }
 
 void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vector &y, const Matrix Sensor_Noise_corr)
@@ -232,12 +236,13 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
     // Picks out the part of the covariance matrix which is with respect to the error parameters "gibbs" ie: [P_gibbs]
     Matrix P_gibbs = err_corr_orientation.block<3, 3>(0, 0);
    
+
     // Picks outthe first three rows, describing the covariance between "a" and "b" ie: [Pa Pc]
     Matrix PAC = err_corr_orientation.block<3, 6>(0, 0);
-    
+
     // Picks out the part of the error state which coinsides with the gibs parameters
     state_gibbs = state_orientation.segment(0, 3);
-    
+
     // Calculates the inverse of the predicted quaternion
     Vector4 state_quaternion_inv{
         {-state_quaternion(0)},
@@ -246,17 +251,22 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
         {state_quaternion(3)},
     };
 
-
     // Finds the error quaternion describing the difference between the measured and predicted value
     Vector4 error_quat = shuster_multiply(y, state_quaternion_inv);
- 
+
     // Maps the error quaternion to gibbs parameters
-    Vector3 error_gibbs{
-        {(float) 2.0*error_quat(0)/error_quat(3)},
-        {(float) 2.0*error_quat(1)/error_quat(3)},
-        {(float) 2.0*error_quat(2)/error_quat(3)},
-    };
-    
+    Vector3 error_gibbs;
+    if (error_quat(3) != 0) {
+        error_gibbs(0) = 2.0f * error_quat(0) / error_quat(3);
+        error_gibbs(1) = 2.0f * error_quat(1) / error_quat(3);
+        error_gibbs(2) = 2.0f * error_quat(2) / error_quat(3);
+    } else {
+        // Handle the division by zero case, perhaps setting to a default value or logging an error
+        error_gibbs(0) = error_gibbs(1) = error_gibbs(2) = 0.0f; // Example: setting to zero
+        std::cerr << "Warning: Division by zero when calculating Gibbs vector" << std::endl;
+    }
+
+
     // Picks out the first three columns of the covariance matrix ie: [Pa Pc^(T)]^(T)
     // Note that PAC is NOT is equal Pact due to numerical approximations, so the covariance matrix is NOT symetric
     Matrix Pact = err_corr_orientation.block<6, 3>(0, 0);
@@ -289,6 +299,7 @@ void KalmanFilter::update_orientation(const std::string &abs_sensor, const Vecto
 
     // Updates the error state covariance matrix
     err_corr_orientation = err_corr_orientation - Kalman_gain * PAC;
+
 }
 
 // Sensor transitions - Accelerometer, Gyroscope, Magnetometer, GPS, Barometer
